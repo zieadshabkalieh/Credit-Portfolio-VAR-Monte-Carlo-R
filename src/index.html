@@ -1,0 +1,211 @@
+[2/‏11, 3:17 م] سادي: <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Input</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f9;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 90%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .matrix {
+            display: grid;
+            grid-template-columns: repeat(23, 1fr);
+            gap: 5px;
+            margin: 20px 0;
+        }
+
+        .matrix input[type="text"] {
+            width: 40px;
+            height: 40px;
+            text-align: center;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #fff;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .matrix input[type="text"]:focus {
+            border-color: #6a1b9a;
+        }
+
+        .submit-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #6a1b9a;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .submit-btn:hover {
+            background-color: #551a8b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Paste 23x23 Matrix Values</h1>
+        <p>Copy all cells from your Excel and paste them directly into the first cell below. The values will be distributed automatically.</p>
+        <form action="process_matrix.php" method="post" onsubmit="return handleSubmit()">
+            <div class="matrix" id="matrix-grid">
+                <!-- Create a 23x23 grid of inputs -->
+                <script>
+                    for (let i = 0; i < 23; i++) {
+                        for (let j = 0; j < 23; j++) {
+                            document.write(<input type="text" name="matrix[${i}][${j}]" maxlength="10">);
+                        }
+                    }
+                </script>
+            </div>
+            <button type="submit" class="submit-btn">Submit Matrix</button>
+        </form>
+    </div>
+
+    <script>
+        // Handle paste event
+        document.getElementById('matrix-grid').addEventListener('paste', function(event) {
+            event.preventDefault();
+            const pasteData = event.clipboardData.getData('text');
+            const rows = pasteData.trim().split(/\r?\n/);
+
+            rows.forEach((row, i) => {
+                const values = row.split(/\t/); // Split columns by tab
+                values.forEach((value, j) => {
+                    const input = document.querySelector(input[name="matrix[${i}][${j}]"]);
+                    if (input) {
+                        input.value = value.trim();
+                    }
+                });
+            });
+        });
+
+        function handleSubmit() {
+            // Optional: Validate the matrix (23x23 filled) before submitting
+            const inputs = document.querySelectorAll('#matrix-grid input');
+            for (let input of inputs) {
+                if (input.value === '') {
+                    alert('Please fill all cells in the 23x23 matrix.');
+                    return false;
+                }
+            }
+            return true;
+        }
+    </script>
+</body>
+</html>
+[2/‏11, 3:17 م] سادي: <?php
+require 'vendor/autoload.php'; // Load PHPSpreadsheet
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+// Cholesky Decomposition Function
+function choleskyDecomposition($matrix) {
+    $n = count($matrix);
+    $L = array_fill(0, $n, array_fill(0, $n, 0)); // Initialize L matrix with zeroes
+    for ($i = 0; $i < $n; $i++) {
+        for ($j = 0; $j <= $i; $j++) {
+            $sum = 0;
+
+            if ($j == $i) { // Diagonal elements
+                for ($k = 0; $k < $j; $k++) {
+                    $sum += pow($L[$j][$k], 2);
+                }
+                $L[$j][$j] = sqrt($matrix[$j][$j] - $sum);
+            } else {
+                for ($k = 0; $k < $j; $k++) {
+                    $sum += $L[$i][$k] * $L[$j][$k];
+                }
+                $L[$i][$j] = ($matrix[$i][$j] - $sum) / $L[$j][$j];
+            }
+        }
+    }
+
+    return $L;
+}
+
+// Get matrix from form submission
+$matrix = $_POST['matrix'];
+
+// Convert all elements to float (ensure numeric data)
+foreach ($matrix as $i => $row) {
+    foreach ($row as $j => $value) {
+        $matrix[$i][$j] = (float) $value;
+    }
+}
+
+// Perform Cholesky decomposition on the matrix
+$choleskyMatrix = choleskyDecomposition($matrix);
+
+// Create a new Spreadsheet
+$spreadsheet = new Spreadsheet();
+$sheet = $spreadsheet->getActiveSheet();
+
+// Populate the spreadsheet with the Cholesky decomposition result
+foreach ($choleskyMatrix as $i => $row) {
+    foreach ($row as $j => $value) {
+        // Convert row and column indices to Excel notation (A1, B1, etc.)
+        $cell = chr(65 + $j) . ($i + 1);
+        $sheet->setCellValue($cell, $value);
+    }
+}
+
+// Save the file to a temporary location
+$filename = 'CholeskyDecomposition.xlsx';
+$temp_file = tempnam(sys_get_temp_dir(), $filename);
+$writer = new Xlsx($spreadsheet);
+$writer->save($temp_file);
+
+// Display result and provide download button
+echo "<h2>Cholesky Decomposition Result</h2>";
+echo "<pre>";
+foreach ($choleskyMatrix as $row) {
+    foreach ($row as $value) {
+        printf("%.4f ", $value);
+    }
+    echo "\n";
+}
+echo "</pre>";
+echo "<a href='download.php?file=" . urlencode($temp_file) . "' class='download-btn'>Download Result as Excel</a>";
+?>
+
+<style>
+    .download-btn {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #6a1b9a;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 16px;
+        margin-top: 20px;
+    }
+
+    .download-btn:hover {
+        background-color: #551a8b;
+    }
+</style>
+[2/‏11, 3:19 م] سادي: https://groupdiamond.net/matrix/
